@@ -5,16 +5,24 @@ extension AudioRecordingDelegate {
   func initAVAudioSession(config: RecordConfig, manageAudioSession: Bool, queue: DispatchQueue) throws -> NSObjectProtocol {
     let session = AVAudioSession.sharedInstance()
 
-    try applyPreferredSampleRate(config.sampleRate, session: session)
     try applyInterruptionPreference(suppressAlerts: config.audioInterruption == AudioInterruptionMode.none, session: session)
 
     if manageAudioSession {
+      // Colloquial fork: the hardware preferences moved inside the manage
+      // guard. Setting preferred sample rate / channel count makes iOS
+      // re-evaluate the audio route, and route re-evaluation RESETS an
+      // active overrideOutputAudioPort - so an app recording during a
+      // CallKit call with session management disabled had its speakerphone
+      // override silently cleared every time a recording started. An app
+      // that opts out of session management owns ALL session-level state,
+      // hardware preferences included.
+      try applyPreferredSampleRate(config.sampleRate, session: session)
       try applyCategory(AVAudioSession.CategoryOptions(config.iosConfig.categoryOptions), session: session)
       try activateSession(session)
+      try applyPreferredChannelCount(config.numChannels, session: session)
     }
 
     try applyHapticsPreference(config.iosConfig.allowHapticsAndSystemSoundsDuringRecording, session: session)
-    try applyPreferredChannelCount(config.numChannels, session: session)
     try applyPreferredInputDevice(config.device)
 
     return registerInterruptionObserver(queue: queue)
